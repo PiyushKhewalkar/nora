@@ -20,7 +20,6 @@ class Goal(str, Enum):
     GAIN_WEIGHT = "gain_weight"
 
 class User(BaseModel):
-    id: str
     name: str
     age: int
     sex: Sex
@@ -43,3 +42,14 @@ class UserCreate(BaseModel):
     weight: float
     goal: Goal
     activity_level: ActivityLevel
+
+
+class UserUpdate(BaseModel):
+    """Editable fields only. Targets are always recomputed, never sent."""
+    name: str | None = None
+    age: int | None = None
+    sex: Sex | None = None
+    height: float | None = None
+    weight: float | None = None
+    goal: Goal | None = None
+    activity_level: ActivityLevel | None = None

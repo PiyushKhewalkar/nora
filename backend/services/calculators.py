@@ -1,4 +1,5 @@
 from models.user import Sex, ActivityLevel, Goal
+from models.meals import Food
 
 
 ACTIVITY_MULTIPLIERS = {
@@ -54,4 +55,14 @@ def calculate_targets(
         "daily_protein_target": round(protein),
         "daily_carbs_target": round(carbs),
         "daily_fat_target": round(fat),
+    }
+
+
+def calculate_totals(foods: list[Food]) -> dict:
+    """Sum a food list into meal totals. The only source of truth for a meal's numbers."""
+    return {
+        "total_calories": round(sum(f.calories for f in foods), 1),
+        "total_protein": round(sum(f.protein for f in foods), 1),
+        "total_carbs": round(sum(f.carbs for f in foods), 1),
+        "total_fats": round(sum(f.fats for f in foods), 1),
     }

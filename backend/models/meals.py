@@ -13,11 +13,6 @@ class MealUnit(str, Enum):
 
 
 
-class MealStatus(str, Enum):
-    ANALYZED = "analyzed"
-    CONFIRMED = "confirmed"
-
-
 class MealType(str, Enum):
     BREAKFAST = "breakfast"
     LUNCH = "lunch"
@@ -34,14 +29,21 @@ class Food(BaseModel):
     carbs: float
 
 
+class MealCreate(BaseModel):
+    """What a client sends. Totals are never accepted from the client."""
+    foods: list[Food]
+    meal_type: MealType
+    image_url: str | None = None
+
+
 class Meal(BaseModel):
+    """What gets stored. Totals are computed server-side."""
     user_id: str
-    image_url: str
+    image_url: str | None = None
     foods: list[Food]
     total_calories: float
     total_protein: float
     total_carbs: float
     total_fats: float
-    meal_status: MealStatus
     meal_type: MealType
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

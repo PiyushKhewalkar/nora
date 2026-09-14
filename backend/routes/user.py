@@ -1,9 +1,11 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
-from models.user import User, UserCreate
+from models.user import UserCreate, UserUpdate
 from database.mongo import db
 
 from services.calculators import calculate_targets
+from utils.serializers import serialize_doc
+from utils.validators import to_object_id
 
 
 router = APIRouter(
@@ -43,28 +45,42 @@ def create_user(user: UserCreate):
 @router.get("/{user_id}")
 def get_user(user_id: str):
 
-    result = db.users.find_one({"id": user_id})
+    result = db.users.find_one({"_id": to_object_id(user_id)})
 
     if result is None:
-        return {
-            "message": "No user found"
-        }
+        raise HTTPException(status_code=404, detail="User not found")
 
     return {
-        "data": result,
+        "data": serialize_doc(result),
         "message": "user fetched successfully"
     }
 
 
 @router.put("/{user_id}")
-def update_user(user_id: str, user: User):
+def update_user(user_id: str, user: UserUpdate):
 
-    user_data = user.model_dump()
+    oid = to_object_id(user_id)
+    existing = db.users.find_one({"_id": oid})
 
-    result = db.users.update_one(
-        {"id": user_id},
-        {"$set": user_data}
+    if existing is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Only the fields actually sent.
+    changes = user.model_dump(exclude_unset=True)
+
+    # Targets depend on age/sex/height/weight/activity/goal, so recompute them
+    # from the merged state rather than trusting whatever the client sent.
+    merged = {**existing, **changes}
+    targets = calculate_targets(
+        age=merged["age"],
+        sex=merged["sex"],
+        height=merged["height"],
+        weight=merged["weight"],
+        activity_level=merged["activity_level"],
+        goal=merged["goal"],
     )
+
+    db.users.update_one({"_id": oid}, {"$set": {**changes, **targets}})
 
     return {
         "message": "user updated successfully"

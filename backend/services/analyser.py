@@ -62,16 +62,16 @@ than omitting it."""},
                 {
                     "type": "input_image",
                     "image_url": image_url,
+                    "detail": "auto",
                 },
             ],
         }
     ],
-    text_format=MealAnalysis
+    text_format=MealAnalysis,
+    timeout=30,
 )
  
     result = response.output_parsed
-
-    print(result)
 
     if result is None:
         return []
