@@ -16,11 +16,15 @@ if (!BASE_URL) {
   throw new Error("VITE_API_URL is not set. Copy .env.example to .env.");
 }
 
-/** Most endpoints answer in well under a second. */
-export const DEFAULT_TIMEOUT_MS = 15_000;
+/**
+ * Most endpoints answer in well under a second, but a free-tier host sleeps
+ * when idle and takes roughly a minute to wake. A short timeout would fail
+ * every first request of the day. Lower this if the backend stops sleeping.
+ */
+export const DEFAULT_TIMEOUT_MS = 75_000;
 
-/** Analysis runs 10-20s server-side; give it room without being unbounded. */
-export const ANALYSIS_TIMEOUT_MS = 60_000;
+/** Analysis runs 10-20s server-side, plus a possible cold start ahead of it. */
+export const ANALYSIS_TIMEOUT_MS = 90_000;
 
 export const http = axios.create({
   baseURL: BASE_URL,

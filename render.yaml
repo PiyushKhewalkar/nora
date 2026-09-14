@@ -1,0 +1,35 @@
+# Render blueprint. New > Blueprint in the Render dashboard picks this up.
+# Values marked `sync: false` are secrets: Render prompts for them and they
+# never live in this file.
+services:
+  - type: web
+    name: nora-backend
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: MONGODB_URI
+        sync: false
+      - key: DATABASE_NAME
+        value: nora
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      # The single V1 user. Create one via POST /users/ then paste the id.
+      - key: DEFAULT_USER_ID
+        sync: false
+      - key: TIMEZONE
+        value: Asia/Kolkata
+      # Set to the Vercel URL once the frontend is deployed, then redeploy.
+      - key: ALLOWED_ORIGINS
+        value: http://localhost:5173
