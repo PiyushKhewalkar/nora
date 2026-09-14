@@ -2,11 +2,12 @@ import { useState } from "react";
 
 import { CaptureScreen } from "./screens/CaptureScreen";
 import { EditorScreen } from "./screens/EditorScreen";
+import { ProfileScreen } from "./screens/ProfileScreen";
 import { TodayScreen } from "./screens/TodayScreen";
 import type { DraftInit } from "./hooks/useMealDraft";
 import type { Meal } from "./types/api";
 
-type Screen = "today" | "capture" | "editor";
+type Screen = "today" | "capture" | "editor" | "profile";
 
 interface EditorState {
   initial: DraftInit;
@@ -52,6 +53,11 @@ export default function App() {
     );
   }
 
+  if (screen === "profile") {
+    // Refresh Today on the way back: saving a profile changes the targets it shows.
+    return <ProfileScreen onBack={() => backToToday(true)} />;
+  }
+
   if (screen === "editor" && editor) {
     return (
       <EditorScreen
@@ -79,7 +85,7 @@ export default function App() {
           imageUrl: meal.image_url,
         })
       }
-      onProfile={() => console.log("profile")}
+      onProfile={() => setScreen("profile")}
     />
   );
 }
