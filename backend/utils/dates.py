@@ -11,9 +11,22 @@ from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 
+def timezone_name() -> str:
+    """The configured zone name, cleaned of stray quotes and whitespace."""
+    return (os.getenv("TIMEZONE") or "UTC").strip().strip('"').strip("'")
+
+
 def user_timezone() -> ZoneInfo:
-    """The timezone the user's calendar days are measured in."""
-    return ZoneInfo(os.getenv("TIMEZONE", "UTC"))
+    """The timezone the user's calendar days are measured in.
+
+    Falls back to UTC rather than raising: an unrecognised zone name would
+    otherwise 500 every date-aware endpoint with no indication of the cause.
+    /health reports the mismatch so a typo is visible instead of fatal.
+    """
+    try:
+        return ZoneInfo(timezone_name())
+    except Exception:
+        return ZoneInfo("UTC")
 
 
 def today_local(tz: ZoneInfo | None = None) -> date:
