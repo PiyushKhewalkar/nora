@@ -1,0 +1,19 @@
+# Netlify build config for the Nora frontend.
+# Lives at the repo root; `base` points Netlify into the frontend package.
+
+[build]
+  base = "frontend"
+  command = "npm ci && npm run build"
+  # Relative to `base`, i.e. frontend/dist
+  publish = "dist"
+
+[build.environment]
+  # Compiled into the bundle at build time, not read at runtime. Not a secret:
+  # it is visible in the shipped JavaScript either way.
+  VITE_API_URL = "https://nora-vo9j.onrender.com"
+
+# Single-page app: serve index.html for any path so client routing keeps working.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
