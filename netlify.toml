@@ -4,8 +4,8 @@
 [build]
   base = "frontend"
   command = "npm ci && npm run build"
-  # Relative to `base`, i.e. frontend/dist
-  publish = "dist"
+  # Resolved against the repo root, NOT against `base`.
+  publish = "frontend/dist"
 
 [build.environment]
   # Compiled into the bundle at build time, not read at runtime. Not a secret:
