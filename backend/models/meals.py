@@ -29,6 +29,11 @@ class Food(BaseModel):
     carbs: float
 
 
+class AnalyseRequest(BaseModel):
+    """Analyse an already-uploaded image."""
+    image_url: str
+
+
 class MealCreate(BaseModel):
     """What a client sends. Totals are never accepted from the client."""
     foods: list[Food]

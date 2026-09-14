@@ -4,13 +4,14 @@ from fastapi import APIRouter, File, UploadFile, HTTPException, Query
 
 from config import DEFAULT_USER_ID
 from database.mongo import db
-from models.meals import MealCreate
+from models.meals import AnalyseRequest, MealCreate
 from services.storage import upload_image
 from services.analyser import analyse_food
 from services.calculators import calculate_totals
 from utils.serializers import serialize_doc, serialize_docs
 from utils.validators import to_object_id
 from utils.dates import day_bounds, user_timezone
+from urllib.parse import urlparse
 
 ALLOWED = {"image/jpeg", "image/png", "image/webp", "image/heic"}
 MAX_BYTES = 10 * 1024 * 1024
@@ -106,28 +107,30 @@ def delete_meal(meal_id: str):
         "message": "Meal deleted successfully"
     }
 
-@router.post("/analyse")
-def analyse_meal_image(file: UploadFile = File(...)):
-    # 1. if file.content_type not in ALLOWED  -> raise HTTPException(415, ...)
+@router.post("/upload")
+def upload_meal_image(file: UploadFile = File(...)):
+    """Phase 1: store the photo. Fast, and reports real upload progress to the client."""
+
     if file.content_type not in ALLOWED:
-        raise HTTPException(
-            status_code=415,
-            detail="file not supported"
-        )
+        raise HTTPException(status_code=415, detail="file not supported")
 
-    # 2. if file.size and file.size > MAX_BYTES -> raise HTTPException(413, ...)
-    if file.size > MAX_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail="file is too big"
-        )
-    # 3. image_url = upload_image(file.file)
-    image_url = upload_image(file.file)
-    # 4. foods = analyze_food(image_url)        # stub for now
-    foods = analyse_food(image_url)
-
-    # 5. return {"image_url": image_url, "foods": foods}
+    if file.size and file.size > MAX_BYTES:
+        raise HTTPException(status_code=413, detail="file is too big")
 
     return {
-        "image_url": image_url, "foods": foods
+        "image_url": upload_image(file.file)
+    }
+
+
+@router.post("/analyse")
+def analyse_meal_image(body: AnalyseRequest):
+    """Phase 2: estimate the foods in an already-uploaded photo. Slow (10-20s)."""
+
+    # The model fetches this URL, so only accept images we stored ourselves.
+    if urlparse(body.image_url).hostname != "res.cloudinary.com":
+        raise HTTPException(status_code=400, detail="image_url must be an uploaded meal image")
+
+    return {
+        "image_url": body.image_url,
+        "foods": analyse_food(body.image_url),
     }

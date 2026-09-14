@@ -1,6 +1,9 @@
+from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, HTTPException
 
 from models.user import UserCreate, UserUpdate
+from config import DEFAULT_USER_ID
 from database.mongo import db
 
 from services.calculators import calculate_targets
@@ -39,6 +42,29 @@ def create_user(user: UserCreate):
     return {
         "id": str(result.inserted_id),
         "message": "user created successfully"
+    }
+
+
+@router.get("/me")
+def get_current_user():
+    """The single V1 user, identified by server config rather than by auth."""
+
+    try:
+        oid = ObjectId(DEFAULT_USER_ID)
+    except (InvalidId, TypeError):
+        raise HTTPException(
+            status_code=404,
+            detail="No user configured. Set DEFAULT_USER_ID to an existing user id.",
+        )
+
+    result = db.users.find_one({"_id": oid})
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Configured user not found")
+
+    return {
+        "data": serialize_doc(result),
+        "message": "user fetched successfully"
     }
 
 
