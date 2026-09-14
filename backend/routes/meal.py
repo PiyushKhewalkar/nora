@@ -10,7 +10,7 @@ from services.analyser import analyse_food
 from services.calculators import calculate_totals
 from utils.serializers import serialize_doc, serialize_docs
 from utils.validators import to_object_id
-from utils.dates import day_bounds, user_timezone
+from utils.dates import day_bounds, today_local, user_timezone
 from urllib.parse import urlparse
 
 ALLOWED = {"image/jpeg", "image/png", "image/webp", "image/heic"}
@@ -25,13 +25,22 @@ router = APIRouter(
 
 @router.get("/")
 def get_meals(day: date | None = Query(None, alias="date")):
-    """List this user's meals, newest first. Optionally scoped to one local day."""
+    """List this user's meals for one local calendar day, newest first.
 
-    query = {"user_id": DEFAULT_USER_ID}
+    With no `date`, defaults to today in the configured timezone - the same
+    rule /summary/ applies. Both endpoints must agree on what "no date" means,
+    or a screen showing the list and the totals together will contradict
+    itself: previously this returned every meal ever logged, so a meal from a
+    past day appeared in the list while counting toward nothing.
+    """
 
-    if day is not None:
-        start, end = day_bounds(day, user_timezone())
-        query["created_at"] = {"$gte": start, "$lt": end}
+    tz = user_timezone()
+    start, end = day_bounds(day or today_local(tz), tz)
+
+    query = {
+        "user_id": DEFAULT_USER_ID,
+        "created_at": {"$gte": start, "$lt": end},
+    }
 
     meals = db.meals.find(query).sort("created_at", -1)
 
