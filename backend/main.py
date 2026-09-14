@@ -1,3 +1,5 @@
+import os
+
 from fastapi import FastAPI
 from config import ALLOWED_ORIGINS
 from database.mongo import db
@@ -27,5 +29,15 @@ def health():
 
 @app.get("/health/db")
 def database_health():
-    db.command("ping")
-    return {"database": "connected"}
+    """Report why the database is unreachable without exposing credentials."""
+    try:
+        db.command("ping")
+        return {"database": "connected"}
+    except Exception as exc:
+        return {
+            "database": "unreachable",
+            "error": type(exc).__name__,
+            # Distinguishes a missing variable from a network block. The value
+            # itself is never returned.
+            "mongodb_uri_configured": bool(os.getenv("MONGODB_URI")),
+        }
