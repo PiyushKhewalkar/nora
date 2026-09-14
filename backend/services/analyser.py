@@ -9,13 +9,25 @@ load_dotenv()
 class MealAnalysis(BaseModel):
     foods: list[Food]
 
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY")
-)
+_client: OpenAI | None = None
+
+
+def get_client() -> OpenAI:
+    """Build the OpenAI client on first use.
+
+    Constructing it at import time means a missing OPENAI_API_KEY takes the
+    whole app down before uvicorn binds a port - including /health, which is
+    the one endpoint you need to diagnose it. Deferring keeps the app bootable
+    and turns a misconfiguration into a failure of one route.
+    """
+    global _client
+    if _client is None:
+        _client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    return _client
 
 def analyse_food(image_url):
 
-    response = client.responses.parse(
+    response = get_client().responses.parse(
     model="gpt-5.6-luna",
     input=[
         {
