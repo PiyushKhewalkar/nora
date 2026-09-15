@@ -1,8 +1,8 @@
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, File, UploadFile, HTTPException, Query
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Query
 
-from config import DEFAULT_USER_ID
+from dependencies import current_user_id
 from database.mongo import db
 from models.meals import AnalyseRequest, MealCreate
 from services.storage import upload_image
@@ -24,7 +24,10 @@ router = APIRouter(
 
 
 @router.get("/")
-def get_meals(day: date | None = Query(None, alias="date")):
+def get_meals(
+    day: date | None = Query(None, alias="date"),
+    user_id: str = Depends(current_user_id),
+):
     """List this user's meals for one local calendar day, newest first.
 
     With no `date`, defaults to today in the configured timezone - the same
@@ -38,7 +41,7 @@ def get_meals(day: date | None = Query(None, alias="date")):
     start, end = day_bounds(day or today_local(tz), tz)
 
     query = {
-        "user_id": DEFAULT_USER_ID,
+        "user_id": user_id,
         "created_at": {"$gte": start, "$lt": end},
     }
 
@@ -50,9 +53,11 @@ def get_meals(day: date | None = Query(None, alias="date")):
 
 
 @router.get("/{meal_id}")
-def get_meal(meal_id: str):
+def get_meal(meal_id: str, user_id: str = Depends(current_user_id)):
 
-    result = db.meals.find_one({"_id": to_object_id(meal_id)})
+    # Owner is part of the filter: a valid id belonging to someone else must
+    # read as "not found", not as someone else's meal.
+    result = db.meals.find_one({"_id": to_object_id(meal_id), "user_id": user_id})
 
     if result is None:
         raise HTTPException(status_code=404, detail="Meal not found")
@@ -64,13 +69,13 @@ def get_meal(meal_id: str):
 
 
 @router.post("/")
-def create_meal(meal: MealCreate):
+def create_meal(meal: MealCreate, user_id: str = Depends(current_user_id)):
 
     # Totals are computed here, never taken from the client.
     meal_data = {
         **meal.model_dump(),
         **calculate_totals(meal.foods),
-        "user_id": DEFAULT_USER_ID,
+        "user_id": user_id,
         "created_at": datetime.now(timezone.utc),
     }
 
@@ -83,7 +88,7 @@ def create_meal(meal: MealCreate):
 
 
 @router.put("/{meal_id}")
-def update_meal(meal_id: str, meal: MealCreate):
+def update_meal(meal_id: str, meal: MealCreate, user_id: str = Depends(current_user_id)):
 
     # Same rule as create: recompute rather than trust the client.
     meal_data = {
@@ -92,7 +97,7 @@ def update_meal(meal_id: str, meal: MealCreate):
     }
 
     result = db.meals.update_one(
-        {"_id": to_object_id(meal_id)},
+        {"_id": to_object_id(meal_id), "user_id": user_id},
         {"$set": meal_data}
     )
 
@@ -105,9 +110,9 @@ def update_meal(meal_id: str, meal: MealCreate):
 
 
 @router.delete("/{meal_id}")
-def delete_meal(meal_id: str):
+def delete_meal(meal_id: str, user_id: str = Depends(current_user_id)):
 
-    result = db.meals.delete_one({"_id": to_object_id(meal_id)})
+    result = db.meals.delete_one({"_id": to_object_id(meal_id), "user_id": user_id})
 
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Meal not found")
@@ -117,7 +122,10 @@ def delete_meal(meal_id: str):
     }
 
 @router.post("/upload")
-def upload_meal_image(file: UploadFile = File(...)):
+def upload_meal_image(
+    file: UploadFile = File(...),
+    user_id: str = Depends(current_user_id),
+):
     """Phase 1: store the photo. Fast, and reports real upload progress to the client."""
 
     if file.content_type not in ALLOWED:
@@ -132,7 +140,7 @@ def upload_meal_image(file: UploadFile = File(...)):
 
 
 @router.post("/analyse")
-def analyse_meal_image(body: AnalyseRequest):
+def analyse_meal_image(body: AnalyseRequest, user_id: str = Depends(current_user_id)):
     """Phase 2: estimate the foods in an already-uploaded photo. Slow (10-20s)."""
 
     # The model fetches this URL, so only accept images we stored ourselves.

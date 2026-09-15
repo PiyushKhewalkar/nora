@@ -1,10 +1,12 @@
 import { useState } from "react";
 
+import { AuthScreen } from "./screens/AuthScreen";
 import { CaptureScreen } from "./screens/CaptureScreen";
 import { EditorScreen } from "./screens/EditorScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
 import { TodayScreen } from "./screens/TodayScreen";
 import type { DraftInit } from "./hooks/useMealDraft";
+import { useAuth } from "./hooks/useAuth";
 import type { Meal } from "./types/api";
 
 type Screen = "today" | "capture" | "editor" | "profile";
@@ -20,6 +22,7 @@ interface EditorState {
  * this file.
  */
 export default function App() {
+  const auth = useAuth();
   const [screen, setScreen] = useState<Screen>("today");
   const [editor, setEditor] = useState<EditorState | null>(null);
   // Bumped after any write so Today refetches instead of showing stale numbers.
@@ -35,6 +38,19 @@ export default function App() {
     if (refresh) setDayKey((n) => n + 1);
     setScreen("today");
   };
+
+  // Everything below this line assumes a signed-in user: every data route
+  // requires a token, so there is nothing meaningful to render without one.
+  if (!auth.authenticated) {
+    return (
+      <AuthScreen
+        busy={auth.busy}
+        error={auth.error}
+        onSubmit={auth.submit}
+        onModeChange={auth.clearError}
+      />
+    );
+  }
 
   if (screen === "capture") {
     return (
@@ -55,7 +71,15 @@ export default function App() {
 
   if (screen === "profile") {
     // Refresh Today on the way back: saving a profile changes the targets it shows.
-    return <ProfileScreen onBack={() => backToToday(true)} />;
+    return (
+      <ProfileScreen
+        onBack={() => backToToday(true)}
+        onLogout={() => {
+          auth.logout();
+          setScreen("today");
+        }}
+      />
+    );
   }
 
   if (screen === "editor" && editor) {

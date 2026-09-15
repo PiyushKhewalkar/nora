@@ -3,8 +3,10 @@ import os
 from fastapi import FastAPI
 from config import ALLOWED_ORIGINS
 from database.mongo import db
+from services.auth import jwt_configured
 from utils.dates import timezone_name, user_timezone
 from routes.user import router as user_router
+from routes.auth import router as auth_router
 from routes.meal import router as meal_router
 from routes.summary import router as summary_router
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +21,7 @@ app.add_middleware(
     allow_methods=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(user_router)
 app.include_router(meal_router)
 app.include_router(summary_router)
@@ -33,6 +36,8 @@ def health():
         "timezone_configured": configured,
         "timezone_effective": effective,
         "timezone_valid": configured == effective,
+        # Surfaces a missing signing key without ever returning it.
+        "auth_configured": jwt_configured(),
     }
 
 @app.get("/health/db")

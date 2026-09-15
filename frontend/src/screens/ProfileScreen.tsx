@@ -3,7 +3,12 @@ import { TargetsPanel } from "../components/profile/TargetsPanel";
 import { Button } from "../components/ui/Button";
 import { useProfile } from "../hooks/useProfile";
 
-export function ProfileScreen({ onBack }: { onBack: () => void }) {
+interface Props {
+  onBack: () => void;
+  onLogout: () => void;
+}
+
+export function ProfileScreen({ onBack, onLogout }: Props) {
   const profile = useProfile();
 
   return (
@@ -38,27 +43,13 @@ export function ProfileScreen({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        {(profile.status === "ready" || profile.status === "absent") && (
+        {(profile.status === "ready" || profile.status === "incomplete") && (
           <>
-            {profile.status === "absent" && !profile.createdId && (
+            {profile.status === "incomplete" && (
               <p className="rounded-md border border-divider bg-accent-soft px-3 py-2 text-sm">
-                No profile is configured yet. Fill this in and save to create one.
+                Finish your profile to get daily targets. Until then Nora counts what you
+                eat but has nothing to compare it against.
               </p>
-            )}
-
-            {/* V1 has no auth: a newly created profile only takes effect once
-                its id is set as DEFAULT_USER_ID on the server. */}
-            {profile.createdId && (
-              <div className="rounded-md border border-divider bg-accent-soft px-3 py-3 text-sm">
-                <p className="font-heading text-base">Profile created</p>
-                <p className="mt-1 text-muted">
-                  One more step: set <code className="text-ink">DEFAULT_USER_ID</code> on the
-                  server to this id, then reload.
-                </p>
-                <code className="mt-2 block overflow-x-auto rounded bg-bg px-2 py-1 text-xs text-ink">
-                  {profile.createdId}
-                </code>
-              </div>
             )}
 
             <p className="text-sm text-muted">
@@ -79,17 +70,25 @@ export function ProfileScreen({ onBack }: { onBack: () => void }) {
             <Button
               variant="primary"
               block
-              disabled={profile.saving || (!profile.dirty && profile.user !== null)}
+              disabled={profile.saving || (!profile.dirty && profile.status === "ready")}
               onClick={profile.save}
             >
               {profile.saving
                 ? "Saving…"
-                : profile.user
-                  ? profile.dirty
+                : profile.status === "incomplete"
+                  ? "Complete profile"
+                  : profile.dirty
                     ? "Save profile"
-                    : "Saved"
-                  : "Create profile"}
+                    : "Saved"}
             </Button>
+            <div className="border-t border-divider pt-4">
+              <Button variant="ghost" block onClick={onLogout}>
+                Sign out
+              </Button>
+              {profile.user && (
+                <p className="mt-1 text-center text-xs text-muted">{profile.user.email}</p>
+              )}
+            </div>
           </>
         )}
       </main>

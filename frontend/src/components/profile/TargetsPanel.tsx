@@ -7,22 +7,32 @@ interface Props {
   stale: boolean;
 }
 
-export function TargetsPanel({ user, stale }: Props) {
-  const status = !user ? "not saved yet" : stale ? "will update when you save" : "from your saved profile";
+const DASHES = [
+  { label: "kcal", value: "—" },
+  { label: "Prot", value: "—" },
+  { label: "Carb", value: "—" },
+  { label: "Fat", value: "—" },
+];
 
-  const cells = user
+export function TargetsPanel({ user, stale }: Props) {
+  // Targets are null until the whole profile is present, so an incomplete
+  // account shows dashes rather than zeroes - which would read as a real total.
+  const hasTargets = user !== null && user.daily_calorie_target !== null;
+
+  const status = !hasTargets
+    ? "complete your profile to see these"
+    : stale
+      ? "will update when you save"
+      : "from your saved profile";
+
+  const cells = hasTargets
     ? [
-        { label: "kcal", value: kcal(user.daily_calorie_target) },
-        { label: "Prot", value: grams(user.daily_protein_target) },
-        { label: "Carb", value: grams(user.daily_carbs_target) },
-        { label: "Fat", value: grams(user.daily_fat_target) },
+        { label: "kcal", value: kcal(user.daily_calorie_target!) },
+        { label: "Prot", value: grams(user.daily_protein_target!) },
+        { label: "Carb", value: grams(user.daily_carbs_target!) },
+        { label: "Fat", value: grams(user.daily_fat_target!) },
       ]
-    : [
-        { label: "kcal", value: "—" },
-        { label: "Prot", value: "—" },
-        { label: "Carb", value: "—" },
-        { label: "Fat", value: "—" },
-      ];
+    : DASHES;
 
   return (
     <section className="rounded-md border border-divider bg-surface/60 p-4">

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiError } from "../api/client";
-import { createUser, getCurrentUser, updateUser } from "../api/users";
+import { getCurrentUser, updateUser } from "../api/users";
 import type { ActivityLevel, Goal, Sex, User } from "../types/api";
 
-export type ProfileStatus = "loading" | "ready" | "absent" | "error";
+/** "incomplete" = signed in, but onboarding has not been finished. */
+export type ProfileStatus = "loading" | "ready" | "incomplete" | "error";
 
 /** Numeric fields are strings for the same reason as the meal draft: a
  *  number input cannot represent "being cleared" without becoming NaN. */
@@ -36,14 +37,15 @@ const BLANK: ProfileForm = {
 };
 
 function toForm(user: User): ProfileForm {
+  // Every field can be null before onboarding; fall back to the blank defaults.
   return {
-    name: user.name,
-    age: String(user.age),
-    height: String(user.height),
-    weight: String(user.weight),
-    sex: user.sex,
-    goal: user.goal,
-    activity_level: user.activity_level,
+    name: user.name ?? "",
+    age: user.age === null ? "" : String(user.age),
+    height: user.height === null ? "" : String(user.height),
+    weight: user.weight === null ? "" : String(user.weight),
+    sex: user.sex ?? BLANK.sex,
+    goal: user.goal ?? BLANK.goal,
+    activity_level: user.activity_level ?? BLANK.activity_level,
   };
 }
 
@@ -61,9 +63,6 @@ export function useProfile() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [showErrors, setShowErrors] = useState(false);
-  /** Set when a profile was created rather than updated: the id must then be
-   *  configured server-side as DEFAULT_USER_ID before it takes effect. */
-  const [createdId, setCreatedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -72,16 +71,11 @@ export function useProfile() {
       const current = await getCurrentUser();
       setUser(current);
       setForm(toForm(current));
-      setStatus("ready");
+      // The account always exists once authenticated; what may be missing is
+      // the profile, and with it the targets.
+      setStatus(current.daily_calorie_target === null ? "incomplete" : "ready");
     } catch (caught) {
       const error = caught instanceof ApiError ? caught : null;
-      if (error?.status === 404) {
-        // No profile configured yet. The form becomes a create form.
-        setUser(null);
-        setForm(BLANK);
-        setStatus("absent");
-        return;
-      }
       setLoadError(error?.message ?? "Could not load your profile.");
       setStatus("error");
     }
@@ -94,7 +88,6 @@ export function useProfile() {
   const setField = useCallback(<K extends keyof ProfileForm>(field: K, value: ProfileForm[K]) => {
     setForm((current) => ({ ...current, [field]: value }));
     setSaveError(null);
-    setCreatedId(null);
   }, []);
 
   const errors = useMemo<ProfileErrors>(() => {
@@ -141,13 +134,8 @@ export function useProfile() {
         activity_level: form.activity_level,
       };
 
-      if (user) {
-        await updateUser(user.id, payload);
-        await load();
-      } else {
-        const id = await createUser(payload);
-        setCreatedId(id);
-      }
+      await updateUser(payload);
+      await load();
     } catch (caught) {
       setSaveError(
         caught instanceof ApiError ? caught.message : "Could not save your profile.",
@@ -168,7 +156,6 @@ export function useProfile() {
     saving,
     saveError,
     loadError,
-    createdId,
     save,
     reload: load,
   };

@@ -123,13 +123,24 @@ export interface UserCreate {
   activity_level: ActivityLevel;
 }
 
-export interface User extends UserCreate {
+/**
+ * A stored account. Every profile field is null between signing up and
+ * completing onboarding, and the derived targets are null alongside them.
+ */
+export interface User {
   id: string;
-  /** Derived by the server. Never sent by the client. */
-  daily_calorie_target: number;
-  daily_protein_target: number;
-  daily_carbs_target: number;
-  daily_fat_target: number;
+  email: string;
+  name: string | null;
+  age: number | null;
+  sex: Sex | null;
+  height: number | null;
+  weight: number | null;
+  goal: Goal | null;
+  activity_level: ActivityLevel | null;
+  daily_calorie_target: number | null;
+  daily_protein_target: number | null;
+  daily_carbs_target: number | null;
+  daily_fat_target: number | null;
   created_at: string;
 }
 

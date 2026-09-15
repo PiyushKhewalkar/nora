@@ -1,113 +1,74 @@
 from bson import ObjectId
-from bson.errors import InvalidId
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from models.user import UserCreate, UserUpdate
-from config import DEFAULT_USER_ID
 from database.mongo import db
-
+from dependencies import current_user_id
+from models.user import UserUpdate
 from services.calculators import calculate_targets
 from utils.serializers import serialize_doc
 from utils.validators import to_object_id
 
+router = APIRouter(prefix="/users", tags=["Users"])
 
-router = APIRouter(
-    prefix="/users",
-    tags=["Users"]
-)
+# Everything needed before targets can be derived.
+PROFILE_FIELDS = ("age", "sex", "height", "weight", "goal", "activity_level")
+
+# Never leaves the server.
+PRIVATE_FIELDS = ("password_hash",)
 
 
-@router.post("/")
-def create_user(user: UserCreate):
-    user_data = user.model_dump()
+def _public(user: dict) -> dict:
+    """Strip secrets before a user document becomes a response."""
+    safe = {k: v for k, v in user.items() if k not in PRIVATE_FIELDS}
+    return serialize_doc(safe)
 
-    # calculate targets
-    targets = calculate_targets(
-        age=user.age,
-        sex=user.sex,
-        height=user.height,
-        weight=user.weight,
-        activity_level=user.activity_level,
-        goal=user.goal,
-    )
 
-    # create new user data which has targets inside it
-    new_user_data = {
-        **user_data,
-        **targets
-    }
-
-    result = db.users.insert_one(new_user_data)
-
-    return {
-        "id": str(result.inserted_id),
-        "message": "user created successfully"
-    }
+def _load(user_id: str) -> dict:
+    user = db.users.find_one({"_id": to_object_id(user_id)})
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
 
 
 @router.get("/me")
-def get_current_user():
-    """The single V1 user, identified by server config rather than by auth."""
+def get_current_user(user_id: str = Depends(current_user_id)):
+    """The authenticated user.
 
-    try:
-        oid = ObjectId(DEFAULT_USER_ID)
-    except (InvalidId, TypeError):
-        raise HTTPException(
-            status_code=404,
-            detail="No user configured. Set DEFAULT_USER_ID to an existing user id.",
+    There is deliberately no `GET /users/{id}`: with an id in the path, any
+    logged-in user could read any other by guessing one. The only addressable
+    user is the one the token names.
+    """
+    return {
+        "data": _public(_load(user_id)),
+        "message": "user fetched successfully",
+    }
+
+
+@router.put("/me")
+def update_current_user(user: UserUpdate, user_id: str = Depends(current_user_id)):
+    """Update the profile and recompute the derived targets."""
+    existing = _load(user_id)
+
+    changes = user.model_dump(exclude_unset=True)
+    merged = {**existing, **changes}
+
+    update: dict = dict(changes)
+
+    # Targets can only be derived once the whole profile is present. A partially
+    # filled profile keeps null targets, which the clients already handle.
+    if all(merged.get(field) is not None for field in PROFILE_FIELDS):
+        update.update(
+            calculate_targets(
+                age=merged["age"],
+                sex=merged["sex"],
+                height=merged["height"],
+                weight=merged["weight"],
+                activity_level=merged["activity_level"],
+                goal=merged["goal"],
+            )
         )
 
-    result = db.users.find_one({"_id": oid})
+    if update:
+        db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update})
 
-    if result is None:
-        raise HTTPException(status_code=404, detail="Configured user not found")
-
-    return {
-        "data": serialize_doc(result),
-        "message": "user fetched successfully"
-    }
-
-
-@router.get("/{user_id}")
-def get_user(user_id: str):
-
-    result = db.users.find_one({"_id": to_object_id(user_id)})
-
-    if result is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    return {
-        "data": serialize_doc(result),
-        "message": "user fetched successfully"
-    }
-
-
-@router.put("/{user_id}")
-def update_user(user_id: str, user: UserUpdate):
-
-    oid = to_object_id(user_id)
-    existing = db.users.find_one({"_id": oid})
-
-    if existing is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    # Only the fields actually sent.
-    changes = user.model_dump(exclude_unset=True)
-
-    # Targets depend on age/sex/height/weight/activity/goal, so recompute them
-    # from the merged state rather than trusting whatever the client sent.
-    merged = {**existing, **changes}
-    targets = calculate_targets(
-        age=merged["age"],
-        sex=merged["sex"],
-        height=merged["height"],
-        weight=merged["weight"],
-        activity_level=merged["activity_level"],
-        goal=merged["goal"],
-    )
-
-    db.users.update_one({"_id": oid}, {"$set": {**changes, **targets}})
-
-    return {
-        "message": "user updated successfully"
-    }
+    return {"message": "user updated successfully"}

@@ -1,11 +1,11 @@
 from datetime import date
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 
 from bson import ObjectId
 from bson.errors import InvalidId
 
-from config import DEFAULT_USER_ID
+from dependencies import current_user_id
 from database.mongo import db
 from utils.dates import day_bounds, today_local, user_timezone
 
@@ -26,7 +26,10 @@ def _find_user(user_id: str):
 
 
 @router.get("/")
-def get_summary(day: date | None = Query(None, alias="date")):
+def get_summary(
+    day: date | None = Query(None, alias="date"),
+    user_id: str = Depends(current_user_id),
+):
     """Consumed vs target vs remaining for one local calendar day."""
 
     tz = user_timezone()
@@ -34,7 +37,7 @@ def get_summary(day: date | None = Query(None, alias="date")):
     start, end = day_bounds(target_day, tz)
 
     meals = list(db.meals.find({
-        "user_id": DEFAULT_USER_ID,
+        "user_id": user_id,
         "created_at": {"$gte": start, "$lt": end},
     }))
 
@@ -43,11 +46,12 @@ def get_summary(day: date | None = Query(None, alias="date")):
         for m in MACROS
     }
 
-    user = _find_user(DEFAULT_USER_ID)
+    user = _find_user(user_id)
 
-    if user is None:
-        # No user configured yet: report intake, but we cannot compare it
-        # to anything. The client should treat null targets as "not set up".
+    # A signed-up account has no profile until onboarding completes, so the
+    # targets are null even though the user exists. Both cases report intake
+    # and null targets; the clients already render that state.
+    if user is None or user.get("daily_calorie_target") is None:
         targets = None
         remaining = None
     else:

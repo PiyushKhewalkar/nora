@@ -1,4 +1,6 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
+
+from services.auth import MAX_PASSWORD_BYTES, MIN_PASSWORD_LENGTH
 from enum import Enum
 from datetime import datetime, timezone
 
@@ -20,18 +22,33 @@ class Goal(str, Enum):
     GAIN_WEIGHT = "gain_weight"
 
 class User(BaseModel):
-    name: str
-    age: int
-    sex: Sex
-    height: float
-    weight: float
-    goal: Goal
-    activity_level: ActivityLevel
-    daily_calorie_target: int
-    daily_protein_target: int
-    daily_carbs_target: int
-    daily_fat_target: int
+    """A stored account. Profile fields are null until onboarding completes,
+    and the targets derived from them are null alongside."""
+    email: EmailStr
+    name: str | None = None
+    age: int | None = None
+    sex: Sex | None = None
+    height: float | None = None
+    weight: float | None = None
+    goal: Goal | None = None
+    activity_level: ActivityLevel | None = None
+    daily_calorie_target: int | None = None
+    daily_protein_target: int | None = None
+    daily_carbs_target: int | None = None
+    daily_fat_target: int | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class Credentials(BaseModel):
+    """Signup and login payload. Never echoed back in any response."""
+    email: EmailStr
+    # bcrypt raises above 72 bytes, so cap it here: a long password is a 422.
+    password: str = Field(min_length=MIN_PASSWORD_LENGTH, max_length=MAX_PASSWORD_BYTES)
+
+
+class AuthToken(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
 
 
 class UserCreate(BaseModel):

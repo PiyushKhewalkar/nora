@@ -26,6 +26,44 @@ export const DEFAULT_TIMEOUT_MS = 75_000;
 /** Analysis runs 10-20s server-side, plus a possible cold start ahead of it. */
 export const ANALYSIS_TIMEOUT_MS = 90_000;
 
+/* ------------------------------------------------------------------ */
+/* Session token                                                        */
+/* ------------------------------------------------------------------ */
+
+const TOKEN_KEY = "nora.token";
+
+/**
+ * Held in localStorage rather than an httpOnly cookie.
+ *
+ * The API is on a different site to the app (onrender.com vs netlify.app), so
+ * a cookie would be cross-site: SameSite=None, credentialed CORS, CSRF
+ * handling, and squarely in the path of browsers restricting third-party
+ * cookies. The trade is XSS exposure, acceptable here only because the app
+ * renders no user-supplied HTML and loads no third-party scripts.
+ */
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null; // private mode, blocked storage
+  }
+}
+
+export function setToken(token: string | null): void {
+  try {
+    if (token === null) localStorage.removeItem(TOKEN_KEY);
+    else localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    /* storage unavailable; the session simply will not persist */
+  }
+}
+
+/** Notified when the server rejects our token, so the app can show the login screen. */
+let onUnauthenticated: (() => void) | null = null;
+export function setUnauthenticatedHandler(handler: (() => void) | null): void {
+  onUnauthenticated = handler;
+}
+
 export const http = axios.create({
   baseURL: BASE_URL,
   timeout: DEFAULT_TIMEOUT_MS,
@@ -105,9 +143,24 @@ function toApiError(error: unknown): ApiError {
   return new ApiError("server", error instanceof Error ? error.message : "Unknown error.", null);
 }
 
+http.interceptors.request.use((config) => {
+  const token = getToken();
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
 http.interceptors.response.use(
   (response) => response,
-  (error: unknown) => Promise.reject(toApiError(error)),
+  (error: unknown) => {
+    const apiError = toApiError(error);
+    // An expired or revoked token must drop the session rather than leaving
+    // the app retrying forever with credentials the server no longer accepts.
+    if (apiError.status === 401) {
+      setToken(null);
+      onUnauthenticated?.();
+    }
+    return Promise.reject(apiError);
+  },
 );
 
 /* ------------------------------------------------------------------ */
